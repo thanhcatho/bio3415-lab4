@@ -4,24 +4,73 @@ author: "Catherine"
 format: html
 editor: visual
 ---
+<https://quarto.org>.
+---
 
-## Quarto
+## 9.1.1 Question 1
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
+##### Accessing the RNAseq data and sample data
 ```{r}
-1 + 1
+# Read the meta table 
+meta_data <- read.table(
+  system.file("extdata/param/targetsPE.txt", package = "systemPipeRdata"), 
+  header = TRUE, 
+  stringsAsFactors = FALSE
+)
+
+head(meta_data)
+
+# Replace the filename
+# Get the actual path to the FASTQ files directory
+fq_path <- systemPipeRdata::pathList()$fastqdir
+
+# Replace './data/' with the actual directory path in FileName1 and FileName2
+meta_data$FileName1 <- sub("^\\./data/", paste0(fq_path, "/"), meta_data$FileName1)
+meta_data$FileName2 <- sub("^\\./data/", paste0(fq_path, "/"), meta_data$FileName2)
+
+# Verify the updated paths
+head(meta_data[, c("FileName1", "FileName2")])
+
+
+# Display the metadata table using DT package
+library(DT)
+
+# Render interactive table
+datatable(
+  meta_data, 
+  options = list(scrollX = TRUE, pageLength = 5), 
+  caption = "RNA-seq Sample Metadata Table"
+)
+
 ```
 
-You can add options to executable code like this
 
-```{r}
-#| echo: false
-2 * 2
-```
+## 9.2.1 Question 2
 
-The `echo: false` option disables the printing of code (only output is displayed).
+##### Read processing
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

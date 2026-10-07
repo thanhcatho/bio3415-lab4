@@ -98,7 +98,7 @@ rqcCycleBaseCallsPlot(qa_3) + theme_bw()
 
 ## 9.2.2 Question 3
 ```{r}
-dir.create("outputs/processed_fastq", recursive = TRUE)
+dir.create("outputs/processed_fastq", recursive = TRUE, showWarnings = FALSE)
 
 for (i in seq_along(meta_data$FileName1)) {
   
@@ -107,6 +107,9 @@ for (i in seq_along(meta_data$FileName1)) {
   
   outfiles <- c(paste0("outputs/processed_fastq/", stringr::str_split_1(meta_data$FileName1[i], "\\/")[l], "_processed.fastq.gz"),
                 paste0("outputs/processed_fastq/", stringr::str_split_1(meta_data$FileName2[i], "\\/")[l], "_processed.fastq.gz"))
+  
+  # Remove existing output files
+  file.remove(outfiles[file.exists(outfiles)])
   
   QuasR::preprocessReads(fastqfiles, outfiles,
                   nBases=1,
@@ -119,15 +122,15 @@ for (i in seq_along(meta_data$FileName1)) {
 }
 ```
 
-
 ## 9.3.3 Question 4: Aligning the reads
+```{r}
+library(stringr)
 
+# 1. Create output directories for SAM and BAM files
+dir.create("outputs/sam_files", recursive = TRUE)
+dir.create("outputs/bam_files", recursive = TRUE)
 
-
-
-
-
-
+```
 
 
 

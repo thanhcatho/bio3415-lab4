@@ -126,9 +126,52 @@ for (i in seq_along(meta_data$FileName1)) {
 ```{r}
 library(stringr)
 
-# 1. Create output directories for SAM and BAM files
-dir.create("outputs/sam_files", recursive = TRUE)
-dir.create("outputs/bam_files", recursive = TRUE)
+# Loop through the metadata table
+for (i in seq_along(meta_data$FileName1)) {
+  sample_name <- meta_data$SampleName[i]
+  fastq_file1 <- sub("\\.gz$", "", meta_data$FileName1[i])
+  
+  sam_output <- file.path("outputs/sam_files", paste0(sample_name, ".sam"))
+  bam_output <- file.path("outputs/bam_files", paste0(sample_name, ".bam"))
+  sorted_bam_output <- file.path("outputs/bam_files", paste0(sample_name, "_sorted.bam"))
+  
+  # Log output path MUST be in the bam_files folder as requested
+  log_output_path <- file.path("outputs/bam_files", paste0(sample_name, "_hisat2.log"))
+
+  # Run HISAT2
+  hisat2_log <- tryCatch({
+    system2(
+      command = "hisat2",
+      args = c(
+        "-x", "outputs/hisat2_index/tair10_1_index",
+        "-U", fastq_file1,
+        "-p", "8",
+        "-S", sam_output
+      ),
+      stdout = TRUE,
+      stderr = TRUE
+    )
+  }, error = function(e) {
+    paste("HISAT2 alignment failed for", sample_name, "with error:", e$message)
+  })
+
+  # Write the log file to the bam_files folder
+  writeLines(hisat2_log, con = log_output_path)
+  
+  # Run Samtools conversion, sorting, and indexing inside tryCatch
+  tryCatch({
+    # Convert SAM to BAM
+    system2("samtools", args = c("view", "-bS", sam_output, "-o", bam_output))
+    
+    # Sort BAM with _sorted suffix
+    system2("samtools", args = c("sort", bam_output, "-o", sorted_bam_output))
+    
+    # Index sorted BAM
+    system2("samtools", args = c("index", sorted_bam_output))
+  }, error = function(e) {
+    message("Samtools processing failed for ", sample_name, ": ", e$message)
+  })
+}
 
 ```
 

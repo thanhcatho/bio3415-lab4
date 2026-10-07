@@ -97,7 +97,27 @@ rqcCycleBaseCallsPlot(qa_3) + theme_bw()
 
 
 ## 9.2.2 Question 3
+```{r}
+dir.create("outputs/processed_fastq", recursive = TRUE)
 
+for (i in seq_along(meta_data$FileName1)) {
+  
+  fastqfiles <- c(meta_data$FileName1[i], meta_data$FileName2[i])
+  l <- length(stringr::str_split_1(meta_data$FileName1[i], "\\/"))
+  
+  outfiles <- c(paste0("outputs/processed_fastq/", stringr::str_split_1(meta_data$FileName1[i], "\\/")[l], "_processed.fastq.gz"),
+                paste0("outputs/processed_fastq/", stringr::str_split_1(meta_data$FileName2[i], "\\/")[l], "_processed.fastq.gz"))
+  
+  QuasR::preprocessReads(fastqfiles, outfiles,
+                  nBases=1,
+                  truncateEndBases=3,
+                  Lpattern="GCCCGGGTAA",
+                  minLength=40)
+  
+  meta_data$FileName1[i] <- outfiles[1]
+  meta_data$FileName2[i] <- outfiles[2]
+}
+```
 
 
 

@@ -6,3 +6,4 @@ data/
 outputs/
 .gz
 .fna
+outputs/processed_fastq

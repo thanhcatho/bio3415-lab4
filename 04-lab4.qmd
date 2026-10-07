@@ -48,16 +48,55 @@ datatable(
 ## 9.2.1 Question 2
 
 ##### Read processing
+```{r}
+# Generate the QC report
+library(Rqc)
+library(ggplot2)
+
+# Combine all forward and reverse file paths from your metadata table
+all_files <- c(meta_data$FileName1, meta_data$FileName2)
+
+# Run the overall Rqc quality assessment and generate the HTML report
+qc_report <- rqc(path = dirname(all_files[1]), pattern = "fastq\\.gz$")
+```
+
+##### Generate 3 per-cycle Q-score box plot for files 1-12, 13-24, 25-36
+```{r}
+# Split the files into three equal groups of 12
+files_1_12  <- all_files[1:12]
+files_13_24 <- all_files[13:24]
+files_25_36 <- all_files[25:36]
+
+# Run rqcQA for each batch
+qa_1 <- rqcQA(files_1_12)
+qa_2 <- rqcQA(files_13_24)
+qa_3 <- rqcQA(files_25_36)
+
+# Generate per-cycle Q-score box plots with black and white theme
+rqcCycleQualityBoxPlot(qa_1) + theme_bw()
+rqcCycleQualityBoxPlot(qa_2) + theme_bw()
+rqcCycleQualityBoxPlot(qa_3) + theme_bw()
+```
+
+##### Are there any samples with much longer reads than others?
+- No, they share a uniform read length
+
+##### What’s the shortest number of cycles?
+- The shortest number of cycle is about 75 cycles
+
+##### Generate 3 base call frequency plots for files 1-12, 13-24, 25-36
+```{r}
+# Generate base call frequency plots with black and white theme
+rqcCycleBaseCallsPlot(qa_1) + theme_bw()
+rqcCycleBaseCallsPlot(qa_2) + theme_bw()
+rqcCycleBaseCallsPlot(qa_3) + theme_bw()
+```
+
+##### Does any sample have significant N calls?
+- No, there is no signicicant N calls
 
 
-
-
-
-
-
-
-
-
+## 9.2.2 Question 3
 
 
 

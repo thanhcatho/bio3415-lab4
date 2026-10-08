@@ -684,11 +684,76 @@ pheatmap(
 - Comparing between Expressed Genes and Heatmap, we can observe that Spearman correlation analysis showing the similar pattern between genes and  the heat map is the comparision between all the cluster where we can see the difference color changed.
 
 
+## 9.45.3.2 Question 8
+```{r}
+# Load packages
+library(clusterProfiler)
+library(org.At.tair.db)
+library(dplyr)
+library(ggplot2)
+library(enrichplot)
+
+# Select significant UP-regulated genes from Avirulent vs Mock
+sig_avr_up <- res_avr_mock %>%
+  as.data.frame() %>%
+  dplyr::filter(
+    pvalue < 0.05,
+    log2FoldChange > 1
+  ) %>%
+  rownames()
+
+# Check number of significant genes
+length(sig_avr_up)
+
+# Confirm valid TAIR IDs
+test_map <- AnnotationDbi::select(
+  org.At.tair.db,
+  keys = sig_avr_up,
+  columns = c("TAIR", "GENENAME"),
+  keytype = "TAIR"
+)
+
+# Keep unique valid TAIR IDs
+sig_avr_up_clean <- test_map %>%
+  dplyr::filter(!is.na(TAIR)) %>%
+  dplyr::pull(TAIR) %>%
+  unique()
+
+# Check number of valid genes
+length(sig_avr_up_clean)
+
+# GO enrichment analysis
+ego_avr <- clusterProfiler::enrichGO(
+  gene = sig_avr_up_clean,
+  OrgDb = org.At.tair.db,
+  keyType = "TAIR",
+  ont = "BP",
+  pAdjustMethod = "none",
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.2
+)
+
+# Display GO enrichment results
+ego_avr
+
+# Number of enriched GO terms
+nrow(as.data.frame(ego_avr))
+
+# GO enrichment dot plot
+enrichplot::dotplot(
+  ego_avr,
+  showCategory = 20
+) +
+  ggplot2::ggtitle(
+    "GO Enrichment: Avirulent Response (Up-regulated)"
+  )
 
 
-
-
-
+```
+##### Can you identify terms related to defense and stress mechanisms in plants? 
+- Yes, it includes pollen tube growth, cell tip growth, pollen tube development, and developmental cell growth,...ect. All the terms are indicated on the left side of the graph. 
+##### Discuss what these specific GO terms tell you about the plant’s physiological state when facing an avirulent pathogen.
+- It suggests that the avirulent response in this dataset is associated with changes in plant developmental and cellular growth processes, indicating that pathogen exposure may affect normal plant physiological growth and development.
 
 
 

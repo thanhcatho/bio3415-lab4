@@ -438,3 +438,129 @@ datatable(
   caption = "Gene-Level Read Count Table"
 )
 ```
+
+
+
+## 9.45.3.2 Question 7
+
+```{r}
+library(DESeq2)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(ape)
+
+# Create DESeq2 dataset
+dds2 <- DESeqDataSetFromMatrix(
+  countData = count_table,
+  colData = meta_data,
+  design = ~ Factor
+)
+
+# Run DESeq2
+dds2 <- DESeq(dds2)
+
+# Store DESeq2 dataset for Question 7
+dds2_results <- dds2
+
+# Read the comparisons from the target file
+comp <- systemPipeR::readComp(
+  system.file(
+    "extdata/param/targetsPE.txt",
+    package = "systemPipeRdata"
+  )
+)
+
+comp[[1]]
+
+# Split comparisons
+pairs <- strsplit(comp[[1]], "-")
+
+# Function to count significantly DE genes
+filter_and_count <- function(
+  res_obj,
+  comparison_name,
+  fc_threshold = 2,
+  padj_threshold = 0.2
+) {
+  
+  # Remove genes with missing values
+  res_filtered <- res_obj[
+    !is.na(res_obj$padj) &
+    !is.na(res_obj$log2FoldChange),
+  ]
+  
+  # Keep genes with:
+  # 1. adjusted p-value < 0.2
+  # 2. absolute fold change >= 2
+  sig_genes <- res_filtered[
+    res_filtered$padj < padj_threshold &
+    abs(res_filtered$log2FoldChange) >= log2(fc_threshold),
+  ]
+  
+  data.frame(
+    Comparison = comparison_name,
+    Up_regulated = sum(sig_genes$log2FoldChange > 0),
+    Down_regulated = sum(sig_genes$log2FoldChange < 0)
+  )
+}
+
+# Calculate results for each comparison
+results_summary2 <- do.call(
+  rbind,
+  lapply(pairs, function(p) {
+    
+    res <- DESeq2::results(
+      dds2_results,
+      contrast = c("Factor", p[1], p[2]),
+      alpha = 0.2
+    )
+    
+    filter_and_count(
+      res,
+      paste(p[1], "vs", p[2])
+    )
+  })
+)
+
+# Display summary
+print(results_summary2)
+
+# Reshape data for plotting
+plot_data2 <- results_summary2 %>%
+  pivot_longer(
+    cols = c(Up_regulated, Down_regulated),
+    names_to = "Regulation",
+    values_to = "Count"
+  ) %>%
+  mutate(
+    Regulation = factor(
+      Regulation,
+      levels = c("Up_regulated", "Down_regulated")
+    )
+  )
+
+# Plot
+ggplot(
+  plot_data2,
+  aes(
+    x = Comparison,
+    y = Count,
+    fill = Regulation
+  )
+) +
+  geom_bar(
+    stat = "identity",
+    position = "stack"
+  ) +
+  coord_flip() +
+  labs(
+    title = "Differentially Expressed Genes by Comparison",
+    subtitle = "Adjusted p-value < 0.2 and fold change >= 2",
+    x = "Comparison",
+    y = "Number of Genes",
+    fill = "Regulation"
+  ) +
+  theme_minimal()
+```

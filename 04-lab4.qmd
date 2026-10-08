@@ -4,12 +4,13 @@ author: "Catherine"
 format: html
 editor: visual
 ---
-<https://quarto.org>.
----
+
+## <https://quarto.org>.
 
 ## 9.1.1 Question 1
 
 ##### Accessing the RNAseq data and sample data
+
 ```{r}
 # Read the meta table 
 meta_data <- read.table(
@@ -30,8 +31,6 @@ meta_data$FileName2 <- sub("^\\./data/", paste0(fq_path, "/"), meta_data$FileNam
 
 # Verify the updated paths
 head(meta_data[, c("FileName1", "FileName2")])
-
-
 # Display the metadata table using DT package
 library(DT)
 
@@ -44,10 +43,10 @@ datatable(
 
 ```
 
-
 ## 9.2.1 Question 2
 
 ##### Read processing
+
 ```{r}
 # Generate the QC report
 library(Rqc)
@@ -61,6 +60,7 @@ qc_report <- rqc(path = dirname(all_files[1]), pattern = "fastq\\.gz$")
 ```
 
 ##### Generate 3 per-cycle Q-score box plot for files 1-12, 13-24, 25-36
+
 ```{r}
 # Split the files into three equal groups of 12
 files_1_12  <- all_files[1:12]
@@ -79,12 +79,15 @@ rqcCycleQualityBoxPlot(qa_3) + theme_bw()
 ```
 
 ##### Are there any samples with much longer reads than others?
+
 - No, they share a uniform read length
 
 ##### What’s the shortest number of cycles?
+
 - The shortest number of cycle is about 75 cycles
 
 ##### Generate 3 base call frequency plots for files 1-12, 13-24, 25-36
+
 ```{r}
 # Generate base call frequency plots with black and white theme
 rqcCycleBaseCallsPlot(qa_1) + theme_bw()
@@ -93,41 +96,74 @@ rqcCycleBaseCallsPlot(qa_3) + theme_bw()
 ```
 
 ##### Does any sample have significant N calls?
+
 - No, there is no signicicant N calls
 
-
 ## 9.2.2 Question 3
-```{r}
-dir.create("outputs/processed_fastq", 
-           recursive = TRUE, 
-           showWarnings = FALSE)
 
-for (i in seq_along(meta_data$FileName1)) {
-  
-  fastqfiles <- c(meta_data$FileName1[i],
-                  meta_data$FileName2[i])
-  l <- length(stringr::str_split_1(meta_data$FileName1[i], "\\/"))
-  
-  
-  outfiles <- c(paste0("outputs/processed_fastq/", stringr::str_split_1(meta_data$FileName1[i], "\\/")[l], "_processed.fastq.gz"),
-                paste0("outputs/processed_fastq/", stringr::str_split_1(meta_data$FileName2[i], "\\/")[l], "_processed.fastq.gz"))
-  
-  # Remove existing output files
-  file.remove(outfiles[file.exists(outfiles)])
-  
-  QuasR::preprocessReads(fastqfiles, outfiles,
-                  nBases=1,
-                  truncateEndBases=3,
-                  Lpattern="GCCCGGGTAA",
-                  minLength=40)
-  
-  meta_data$FileName1[i] <- outfiles[1]
-  meta_data$FileName2[i] <- outfiles[2]
+```{r}
+dir.create("outputs/processed_fastq", recursive = TRUE, showWarnings = FALSE)
+
+meta_data <- read.table(
+  system.file("extdata/param/targetsPE.txt", package = "systemPipeRdata"),
+  header = TRUE, stringsAsFactors = FALSE
+)
+fq_path <- systemPipeRdata::pathList()$fastqdir
+meta_data$FileName1 <- sub("^\\./data/", paste0(fq_path, "/"), meta_data$FileName1)
+meta_data$FileName2 <- sub("^\\./data/", paste0(fq_path, "/"), meta_data$FileName2)
+
+meta_data$Proc1 <- file.path("outputs/processed_fastq",
+  sub("\\.fastq\\.gz$", "_processed.fastq.gz", basename(meta_data$FileName1)))
+meta_data$Proc2 <- file.path("outputs/processed_fastq",
+  sub("\\.fastq\\.gz$", "_processed.fastq.gz", basename(meta_data$FileName2)))
+
+for (i in seq_len(nrow(meta_data))) {
+  unlink(c(meta_data$Proc1[i], meta_data$Proc2[i]))
+  QuasR::preprocessReads(
+    c(meta_data$FileName1[i], meta_data$FileName2[i]),
+    c(meta_data$Proc1[i], meta_data$Proc2[i]),
+    nBases = 1,
+    truncateEndBases = 3,
+    Lpattern = "GCCCGGGTAA",
+    minLength = 40
+  )
 }
 ```
 
-## 9.3.3 Question 4: Aligning the reads
 ```{r}
+library(ShortRead)
+
+dir.create("outputs/paired_fastq", recursive = TRUE, showWarnings = FALSE)
+
+meta_data$Pair1 <- file.path("outputs/paired_fastq", basename(meta_data$Proc1))
+meta_data$Pair2 <- file.path("outputs/paired_fastq", basename(meta_data$Proc2))
+
+for (i in seq_len(nrow(meta_data))) {
+  r1 <- readFastq(meta_data$Proc1[i])
+  r2 <- readFastq(meta_data$Proc2[i])
+
+  # read IDs without the /1, /2 suffix or any text after a space
+  id1 <- sub("[ /].*$", "", as.character(id(r1)))
+  id2 <- sub("[ /].*$", "", as.character(id(r2)))
+
+  common <- intersect(id1, id2)
+  r1 <- r1[match(common, id1)]
+  r2 <- r2[match(common, id2)]
+
+  unlink(c(meta_data$Pair1[i], meta_data$Pair2[i]))
+  writeFastq(r1, meta_data$Pair1[i], compress = TRUE)
+  writeFastq(r2, meta_data$Pair2[i], compress = TRUE)
+}
+
+
+```
+
+## 9.3.3 Question 4: Aligning the reads
+
+```{r}
+#| warning: false
+library(stringr)
+
 # Create output directories
 dir.create(
   "outputs/sam_files",
@@ -141,42 +177,38 @@ dir.create(
   showWarnings = FALSE
 )
 
-# Check that all 18 paired-end processed FASTQ files exist
-stopifnot(
-  all(file.exists(meta_data$FileName1)),
-  all(file.exists(meta_data$FileName2))
-)
-
-# Align each sample with HISAT2
+# Loop through the metadata table
 for (i in seq_along(meta_data$FileName1)) {
-
+  
   sample_name <- meta_data$SampleName[i]
-
-  fastq_file1 <- meta_data$FileName1[i]
-  fastq_file2 <- meta_data$FileName2[i]
-
+  
+  # Processed paired-end FASTQ files
+  fastq_file1 <- meta_data$Pair1[i]
+  fastq_file2 <- meta_data$Pair2[i]
+  
+  # Output files
   sam_output <- file.path(
     "outputs/sam_files",
     paste0(sample_name, ".sam")
   )
-
+  
   bam_output <- file.path(
     "outputs/bam_files",
     paste0(sample_name, ".bam")
   )
-
+  
   sorted_bam_output <- file.path(
     "outputs/bam_files",
     paste0(sample_name, "_sorted.bam")
   )
-
+  
   log_output <- file.path(
     "outputs/bam_files",
     paste0(sample_name, "_hisat2.log")
   )
-
+  
   message("Aligning ", sample_name, "...")
-
+  
   # Run HISAT2
   hisat2_result <- system2(
     command = "hisat2",
@@ -190,13 +222,13 @@ for (i in seq_along(meta_data$FileName1)) {
     stdout = TRUE,
     stderr = TRUE
   )
-
-  # Save HISAT2 alignment statistics
+  
+  # Save HISAT2 statistics
   writeLines(
     hisat2_result,
     con = log_output
   )
-
+  
   # Convert SAM to BAM
   system2(
     "samtools",
@@ -208,8 +240,8 @@ for (i in seq_along(meta_data$FileName1)) {
       bam_output
     )
   )
-
-  # Sort BAM file
+  
+  # Sort BAM
   system2(
     "samtools",
     args = c(
@@ -219,8 +251,8 @@ for (i in seq_along(meta_data$FileName1)) {
       sorted_bam_output
     )
   )
-
-  # Index sorted BAM file
+  
+  # Index sorted BAM
   system2(
     "samtools",
     args = c(
@@ -228,36 +260,31 @@ for (i in seq_along(meta_data$FileName1)) {
       sorted_bam_output
     )
   )
-
+  
   message("Finished ", sample_name)
 }
 
-# Confirm that all 18 SAM files were created
-sam_files <- list.files(
-  "outputs/sam_files",
-  pattern = "\\.sam$"
-)
-
-length(sam_files)
 ```
 
 ## 9.3.4.1 Question 5: alignment stats
+
 ```{r}
 library(DT)
+library(dplyr)
 library(ggplot2)
 library(stringr)
 
 # Directory containing HISAT2 log files
 hisat2_logs_dir <- "outputs/bam_files"
 
-# Find HISAT2 log files
+# Find all HISAT2 log files
 log_files <- list.files(
   hisat2_logs_dir,
   pattern = "_hisat2\\.log$",
   full.names = TRUE
 )
 
-# Check that all 18 logs exist
+# Check that all expected log files are present
 if (length(log_files) != 18) {
   stop(
     paste(
@@ -267,68 +294,69 @@ if (length(log_files) != 18) {
   )
 }
 
-# Extract alignment percentages
-align_df <- do.call(
-  rbind,
-  lapply(log_files, function(log_file) {
-
-    log_text <- readLines(
-      log_file,
-      warn = FALSE
+# Extract the overall alignment percentage from each log
+align_list <- lapply(log_files, function(log_file) {
+  
+  # Read the log file
+  log_text <- readLines(log_file, warn = FALSE)
+  
+  # Find the line containing the overall alignment rate
+  alignment_line <- log_text[
+    grepl(
+      "overall alignment rate",
+      log_text,
+      ignore.case = TRUE
     )
-
-    # Find the overall alignment rate
-    alignment_line <- log_text[
-      grepl(
-        "overall alignment rate",
-        log_text,
-        ignore.case = TRUE
-      )
-    ]
-
-    # Stop if the log does not contain a successful alignment
-    if (length(alignment_line) == 0) {
-      stop(
-        paste(
-          "No successful HISAT2 alignment rate found in:",
-          basename(log_file)
-        )
-      )
-    }
-
-    # Extract percentage
-    percent <- as.numeric(
-      str_extract(
-        alignment_line[1],
-        "[0-9]+\\.?[0-9]*(?=%)"
+  ]
+  
+  # Stop with a useful message if the alignment rate is missing
+  if (length(alignment_line) == 0) {
+    stop(
+      paste(
+        "Could not find overall alignment rate in:",
+        basename(log_file)
       )
     )
-
-    # Extract sample name
-    sample_name <- sub(
-      "_hisat2\\.log$",
-      "",
-      basename(log_file)
+  }
+  
+  # Extract the percentage from the alignment line
+  percent <- as.numeric(
+    str_extract(
+      alignment_line[1],
+      "[0-9]+\\.?[0-9]*(?=%)"
     )
+  )
+  
+  # Extract sample name from log filename
+  sample_name <- sub(
+    "_hisat2\\.log$",
+    "",
+    basename(log_file)
+  )
+  
+  data.frame(
+    samplename = sample_name,
+    percent_aligned = percent
+  )
+})
 
-    data.frame(
-      samplename = sample_name,
-      percent_aligned = percent,
-      stringsAsFactors = FALSE
-    )
-  })
+# Combine results into one data frame
+align_df <- bind_rows(align_list)
+
+# Sort samples according to the original metadata order
+align_df$samplename <- factor(
+  align_df$samplename,
+  levels = meta_data$SampleName
 )
 
-# Arrange samples in metadata order
-align_df <- align_df[
-  match(meta_data$SampleName, align_df$samplename),
-]
+align_df <- align_df %>%
+  arrange(samplename)
 
-# Reset row names
-rownames(align_df) <- NULL
+# Convert sample name back to character
+align_df$samplename <- as.character(align_df$samplename)
 
-# Display results
-align_df
+# Display alignment results
+print(align_df)
 
 # Interactive table
 datatable(
@@ -343,10 +371,7 @@ datatable(
 # Boxplot of alignment percentages
 ggplot(
   align_df,
-  aes(
-    x = "",
-    y = percent_aligned
-  )
+  aes(y = percent_aligned)
 ) +
   geom_boxplot(
     fill = "steelblue",
@@ -356,11 +381,13 @@ ggplot(
   ) +
   theme_bw() +
   labs(
-    title = "Distribution of HISAT2 Read Alignment Percentages",
-    x = "",
-    y = "Percent Aligned (%)"
+    title = "Distribution of Read Alignment Percentages",
+    y = "Percent Aligned (%)",
+    x = ""
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
   )
+
 ```
-
-
-

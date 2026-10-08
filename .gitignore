@@ -9,3 +9,4 @@ outputs/
 outputs/processed_fastq/
 outputs/sam_files/
 outputs/bam_files/
+.R

@@ -441,7 +441,7 @@ datatable(
 
 
 
-## 9.45.3.2 Question 7
+## 9.5.3.2 Question 7
 
 ```{r}
 library(DESeq2)
@@ -564,3 +564,141 @@ ggplot(
   ) +
   theme_minimal()
 ```
+
+## 9.45.3.2 Question 8
+```{r}
+#| label: q8-heatmap
+#| fig-cap: "Clustered heatmap of significant differentially expressed genes."
+#| fig-width: 10
+#| fig-height: 8
+
+library(DESeq2)
+library(pheatmap)
+
+# Get normalized counts
+norm_counts <- counts(
+  dds2_results,
+  normalized = TRUE
+)
+
+# Get differential expression results for the three comparisons
+res_vir_mock <- DESeq2::results(
+  dds2_results,
+  contrast = c("Factor", "V1", "M1"),
+  alpha = 0.05
+)
+
+res_avr_mock <- DESeq2::results(
+  dds2_results,
+  contrast = c("Factor", "A1", "M1"),
+  alpha = 0.05
+)
+
+res_vir_avr <- DESeq2::results(
+  dds2_results,
+  contrast = c("Factor", "V1", "A1"),
+  alpha = 0.05
+)
+
+# Identify significant genes from each comparison
+sig_vir_mock <- rownames(res_vir_mock)[
+  !is.na(res_vir_mock$padj) &
+    res_vir_mock$padj < 0.05
+]
+
+sig_avr_mock <- rownames(res_avr_mock)[
+  !is.na(res_avr_mock$padj) &
+    res_avr_mock$padj < 0.05
+]
+
+sig_vir_avr <- rownames(res_vir_avr)[
+  !is.na(res_vir_avr$padj) &
+    res_vir_avr$padj < 0.05
+]
+
+# Combine significant genes from all three comparisons
+sig_genes <- unique(
+  c(
+    sig_vir_mock,
+    sig_avr_mock,
+    sig_vir_avr
+  )
+)
+
+# Keep only genes present in the normalized count matrix
+sig_genes <- intersect(
+  sig_genes,
+  rownames(norm_counts)
+)
+
+# Extract normalized counts for significant DEGs
+heatmap_data <- norm_counts[
+  sig_genes,
+  ,
+  drop = FALSE
+]
+
+# Log2 transform the normalized counts
+heatmap_data_log <- log2(
+  heatmap_data + 1
+)
+
+# Row-wise Z-score normalization
+heatmap_z <- t(
+  scale(
+    t(heatmap_data_log)
+  )
+)
+
+# Remove genes with NA values after scaling
+heatmap_z <- heatmap_z[
+  complete.cases(heatmap_z),
+  ,
+  drop = FALSE
+]
+
+# Create sample annotation
+sample_annotation <- data.frame(
+  Factor = as.character(dds2_results$Factor)
+)
+
+rownames(sample_annotation) <- colnames(heatmap_z)
+
+# Generate clustered heatmap
+pheatmap(
+  heatmap_z,
+  scale = "none",
+  clustering_distance_rows = "euclidean",
+  clustering_distance_cols = "euclidean",
+  clustering_method = "complete",
+  annotation_col = sample_annotation,
+  color = colorRampPalette(
+    c("blue", "white", "red")
+  )(100),
+  show_rownames = TRUE,
+  main = "Clustered Heatmap of Significant DEGs"
+)
+```
+
+##### Pay attention to how the samples group together and compare this clustering pattern to what you observed in your earlier Spearman correlation analysis that used all genes.
+- Comparing between Expressed Genes and Heatmap, we can observe that Spearman correlation analysis showing the similar pattern between genes and  the heat map is the comparision between all the cluster where we can see the difference color changed.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

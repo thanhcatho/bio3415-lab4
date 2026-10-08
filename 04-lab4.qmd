@@ -391,3 +391,50 @@ ggplot(
   )
 
 ```
+
+## 9.4.1 Question 6: the count table
+
+```{r}
+library(DT)
+library(dplyr)
+library(Rsubread)
+
+bfiles <- list.files("outputs/bam_files", pattern = "_sorted.bam$", full.names = TRUE)
+
+gene_count_list <- Rsubread::featureCounts(
+  files = bfiles,
+  annot.ext = "data/GCF_000001735.4_TAIR10.1_genomic.gtf",
+  isGTFAnnotationFile = TRUE,
+  allowMultiOverlap = FALSE,
+  isPairedEnd = TRUE, nthreads = 8,
+  minMQS = 10,
+  GTF.featureType = "exon",
+  GTF.attrType = "gene_id"
+)
+
+# Assign the count matrix to count_table
+count_table <- gene_count_list$counts
+
+# Remove "_sorted.bam" from column names
+colnames(count_table) <- sub(
+  "_sorted\\.bam$",
+  "",
+  colnames(count_table)
+)
+
+# Keep only genes with at least one read mapped
+# across all samples
+count_table <- count_table[
+  rowSums(count_table) > 0,
+]
+
+# Display the count table as an interactive table
+datatable(
+  count_table,
+  options = list(
+    scrollX = TRUE,
+    pageLength = 10
+  ),
+  caption = "Gene-Level Read Count Table"
+)
+```

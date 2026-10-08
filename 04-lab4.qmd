@@ -98,12 +98,16 @@ rqcCycleBaseCallsPlot(qa_3) + theme_bw()
 
 ## 9.2.2 Question 3
 ```{r}
-dir.create("outputs/processed_fastq", recursive = TRUE, showWarnings = FALSE)
+dir.create("outputs/processed_fastq", 
+           recursive = TRUE, 
+           showWarnings = FALSE)
 
 for (i in seq_along(meta_data$FileName1)) {
   
-  fastqfiles <- c(meta_data$FileName1[i], meta_data$FileName2[i])
+  fastqfiles <- c(meta_data$FileName1[i],
+                  meta_data$FileName2[i])
   l <- length(stringr::str_split_1(meta_data$FileName1[i], "\\/"))
+  
   
   outfiles <- c(paste0("outputs/processed_fastq/", stringr::str_split_1(meta_data$FileName1[i], "\\/")[l], "_processed.fastq.gz"),
                 paste0("outputs/processed_fastq/", stringr::str_split_1(meta_data$FileName2[i], "\\/")[l], "_processed.fastq.gz"))
@@ -124,59 +128,239 @@ for (i in seq_along(meta_data$FileName1)) {
 
 ## 9.3.3 Question 4: Aligning the reads
 ```{r}
-library(stringr)
+# Create output directories
+dir.create(
+  "outputs/sam_files",
+  recursive = TRUE,
+  showWarnings = FALSE
+)
 
-# Loop through the metadata table
+dir.create(
+  "outputs/bam_files",
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+# Check that all 18 paired-end processed FASTQ files exist
+stopifnot(
+  all(file.exists(meta_data$FileName1)),
+  all(file.exists(meta_data$FileName2))
+)
+
+# Align each sample with HISAT2
 for (i in seq_along(meta_data$FileName1)) {
+
   sample_name <- meta_data$SampleName[i]
-  fastq_file1 <- sub("\\.gz$", "", meta_data$FileName1[i])
-  
-  sam_output <- file.path("outputs/sam_files", paste0(sample_name, ".sam"))
-  bam_output <- file.path("outputs/bam_files", paste0(sample_name, ".bam"))
-  sorted_bam_output <- file.path("outputs/bam_files", paste0(sample_name, "_sorted.bam"))
-  
-  # Log output path MUST be in the bam_files folder as requested
-  log_output_path <- file.path("outputs/bam_files", paste0(sample_name, "_hisat2.log"))
+
+  fastq_file1 <- meta_data$FileName1[i]
+  fastq_file2 <- meta_data$FileName2[i]
+
+  sam_output <- file.path(
+    "outputs/sam_files",
+    paste0(sample_name, ".sam")
+  )
+
+  bam_output <- file.path(
+    "outputs/bam_files",
+    paste0(sample_name, ".bam")
+  )
+
+  sorted_bam_output <- file.path(
+    "outputs/bam_files",
+    paste0(sample_name, "_sorted.bam")
+  )
+
+  log_output <- file.path(
+    "outputs/bam_files",
+    paste0(sample_name, "_hisat2.log")
+  )
+
+  message("Aligning ", sample_name, "...")
 
   # Run HISAT2
-  hisat2_log <- tryCatch({
-    system2(
-      command = "hisat2",
-      args = c(
-        "-x", "outputs/hisat2_index/tair10_1_index",
-        "-U", fastq_file1,
-        "-p", "8",
-        "-S", sam_output
-      ),
-      stdout = TRUE,
-      stderr = TRUE
-    )
-  }, error = function(e) {
-    paste("HISAT2 alignment failed for", sample_name, "with error:", e$message)
-  })
+  hisat2_result <- system2(
+    command = "hisat2",
+    args = c(
+      "-x", "outputs/hisat2_index/tair10_1_index",
+      "-1", fastq_file1,
+      "-2", fastq_file2,
+      "-p", "8",
+      "-S", sam_output
+    ),
+    stdout = TRUE,
+    stderr = TRUE
+  )
 
-  # Write the log file to the bam_files folder
-  writeLines(hisat2_log, con = log_output_path)
-  
-  # Run Samtools conversion, sorting, and indexing inside tryCatch
-  tryCatch({
-    # Convert SAM to BAM
-    system2("samtools", args = c("view", "-bS", sam_output, "-o", bam_output))
-    
-    # Sort BAM with _sorted suffix
-    system2("samtools", args = c("sort", bam_output, "-o", sorted_bam_output))
-    
-    # Index sorted BAM
-    system2("samtools", args = c("index", sorted_bam_output))
-  }, error = function(e) {
-    message("Samtools processing failed for ", sample_name, ": ", e$message)
-  })
+  # Save HISAT2 alignment statistics
+  writeLines(
+    hisat2_result,
+    con = log_output
+  )
+
+  # Convert SAM to BAM
+  system2(
+    "samtools",
+    args = c(
+      "view",
+      "-bS",
+      sam_output,
+      "-o",
+      bam_output
+    )
+  )
+
+  # Sort BAM file
+  system2(
+    "samtools",
+    args = c(
+      "sort",
+      bam_output,
+      "-o",
+      sorted_bam_output
+    )
+  )
+
+  # Index sorted BAM file
+  system2(
+    "samtools",
+    args = c(
+      "index",
+      sorted_bam_output
+    )
+  )
+
+  message("Finished ", sample_name)
 }
 
+# Confirm that all 18 SAM files were created
+sam_files <- list.files(
+  "outputs/sam_files",
+  pattern = "\\.sam$"
+)
+
+length(sam_files)
 ```
 
+## 9.3.4.1 Question 5: alignment stats
+```{r}
+library(DT)
+library(ggplot2)
+library(stringr)
 
+# Directory containing HISAT2 log files
+hisat2_logs_dir <- "outputs/bam_files"
 
+# Find HISAT2 log files
+log_files <- list.files(
+  hisat2_logs_dir,
+  pattern = "_hisat2\\.log$",
+  full.names = TRUE
+)
+
+# Check that all 18 logs exist
+if (length(log_files) != 18) {
+  stop(
+    paste(
+      "Expected 18 HISAT2 log files, but found",
+      length(log_files)
+    )
+  )
+}
+
+# Extract alignment percentages
+align_df <- do.call(
+  rbind,
+  lapply(log_files, function(log_file) {
+
+    log_text <- readLines(
+      log_file,
+      warn = FALSE
+    )
+
+    # Find the overall alignment rate
+    alignment_line <- log_text[
+      grepl(
+        "overall alignment rate",
+        log_text,
+        ignore.case = TRUE
+      )
+    ]
+
+    # Stop if the log does not contain a successful alignment
+    if (length(alignment_line) == 0) {
+      stop(
+        paste(
+          "No successful HISAT2 alignment rate found in:",
+          basename(log_file)
+        )
+      )
+    }
+
+    # Extract percentage
+    percent <- as.numeric(
+      str_extract(
+        alignment_line[1],
+        "[0-9]+\\.?[0-9]*(?=%)"
+      )
+    )
+
+    # Extract sample name
+    sample_name <- sub(
+      "_hisat2\\.log$",
+      "",
+      basename(log_file)
+    )
+
+    data.frame(
+      samplename = sample_name,
+      percent_aligned = percent,
+      stringsAsFactors = FALSE
+    )
+  })
+)
+
+# Arrange samples in metadata order
+align_df <- align_df[
+  match(meta_data$SampleName, align_df$samplename),
+]
+
+# Reset row names
+rownames(align_df) <- NULL
+
+# Display results
+align_df
+
+# Interactive table
+datatable(
+  align_df,
+  options = list(
+    scrollX = TRUE,
+    pageLength = 6
+  ),
+  caption = "HISAT2 Read Alignment Percentages per Sample"
+)
+
+# Boxplot of alignment percentages
+ggplot(
+  align_df,
+  aes(
+    x = "",
+    y = percent_aligned
+  )
+) +
+  geom_boxplot(
+    fill = "steelblue",
+    alpha = 0.7,
+    outlier.color = "red",
+    outlier.shape = 16
+  ) +
+  theme_bw() +
+  labs(
+    title = "Distribution of HISAT2 Read Alignment Percentages",
+    x = "",
+    y = "Percent Aligned (%)"
+  )
+```
 
 
 
